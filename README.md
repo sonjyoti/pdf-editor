@@ -176,7 +176,7 @@ Make sure you have installed:
 ## 1. Clone the repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/sonjyoti/pdf-editor.git
 ```
 
 Then enter the project directory:

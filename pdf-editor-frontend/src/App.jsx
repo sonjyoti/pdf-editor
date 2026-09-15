@@ -79,7 +79,10 @@ function App() {
             <p>{message}</p>
 
             {fileUrl && (
-                <PdfViewer fileUrl={fileUrl} />
+                <PdfViewer 
+                    fileUrl={fileUrl}
+                    fileId={fileId}
+                />
             )}
 
         </div>

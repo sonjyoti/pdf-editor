@@ -1,95 +1,201 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
+import PdfTextLayer from "./PdfTextLayer";
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-function PdfViewer({ fileUrl }) {
+function PdfViewer({ fileUrl, fileId }) {
+  const containerRef = useRef(null);
 
-    const containerRef = useRef(null);
+  const [documentData, setDocumentData] = useState(null);
 
-    useEffect(() => {
+  const scale = 1.5;
 
-        if (!fileUrl) {
-            return;
+  const handleSave = () => {
+    const editedElements = document.querySelectorAll(
+      "[contenteditable='true']",
+    );
+
+    editedElements.forEach((element) => {
+      console.log({
+        pageNumber: element.dataset.pageNumber,
+        textIndex: element.dataset.textIndex,
+        newText: element.innerText,
+      });
+    });
+  };
+
+  /*
+   * Fetch text information from backend
+   */
+  useEffect(() => {
+    if (!fileId) {
+      return;
+    }
+
+    const loadText = async () => {
+      try {
+        const response = await fetch(
+          `http://localhost:8080/api/pdf/${fileId}/text`,
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to load PDF text");
         }
 
-        const renderPdf = async () => {
+        const data = await response.json();
 
-            try {
+        console.log("Extracted PDF data:", data);
 
-                const pdf = await pdfjsLib.getDocument({
-                    url: fileUrl
-                }).promise;
+        setDocumentData(data);
+      } catch (error) {
+        console.error("Error loading PDF text:", error);
+      }
+    };
 
-                const container = containerRef.current;
+    loadText();
+  }, [fileId]);
 
-                // Remove previous pages
-                container.innerHTML = "";
+  /*
+   * Render PDF pages
+   */
+  useEffect(() => {
+    if (!fileUrl) {
+      return;
+    }
 
-                for (let pageNumber = 1;
-                     pageNumber <= pdf.numPages;
-                     pageNumber++) {
+    const renderPdf = async () => {
+      try {
+        const pdf = await pdfjsLib.getDocument({
+          url: fileUrl,
+        }).promise;
 
-                    const page = await pdf.getPage(pageNumber);
+        const container = containerRef.current;
 
-                    const scale = 1.5;
+        container.innerHTML = "";
 
-                    const viewport = page.getViewport({
-                        scale
-                    });
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+          const page = await pdf.getPage(pageNumber);
 
-                    // Create page wrapper
-                    const pageContainer =
-                        document.createElement("div");
+          const viewport = page.getViewport({
+            scale,
+          });
 
-                    pageContainer.style.position = "relative";
-                    pageContainer.style.marginBottom = "20px";
-                    pageContainer.style.display = "flex";
-                    pageContainer.style.justifyContent = "center";
+          /*
+           * Page wrapper
+           */
+          const pageContainer = document.createElement("div");
 
-                    // Create canvas
-                    const canvas =
-                        document.createElement("canvas");
+          pageContainer.style.position = "relative";
 
-                    const context =
-                        canvas.getContext("2d");
+          pageContainer.style.width = `${viewport.width}px`;
 
-                    canvas.width = viewport.width;
-                    canvas.height = viewport.height;
+          pageContainer.style.height = `${viewport.height}px`;
 
-                    pageContainer.appendChild(canvas);
-                    container.appendChild(pageContainer);
+          pageContainer.style.margin = "0 auto 20px auto";
 
-                    await page.render({
-                        canvasContext: context,
-                        viewport
-                    }).promise;
-                }
+          /*
+           * Canvas
+           */
+          const canvas = document.createElement("canvas");
 
-            } catch (error) {
+          const context = canvas.getContext("2d");
 
-                console.error(
-                    "Error rendering PDF:",
-                    error
-                );
+          canvas.width = viewport.width;
 
+          canvas.height = viewport.height;
+
+          canvas.style.display = "block";
+
+          pageContainer.appendChild(canvas);
+
+          container.appendChild(pageContainer);
+
+          await page.render({
+            canvasContext: context,
+            viewport,
+          }).promise;
+
+          /*
+           * Add text layer after
+           * document data is available
+           */
+          if (documentData) {
+            const pageData = documentData.pages.find(
+              (page) => page.pageNumber === pageNumber,
+            );
+
+            if (pageData) {
+              const textLayer = document.createElement("div");
+
+              textLayer.style.position = "absolute";
+
+              textLayer.style.top = "0";
+              textLayer.style.left = "0";
+
+              textLayer.style.width = `${viewport.width}px`;
+
+              textLayer.style.height = `${viewport.height}px`;
+
+              textLayer.style.pointerEvents = "none";
+
+              pageContainer.appendChild(textLayer);
+
+              pageData.texts.forEach((element, index) => {
+                const textElement = document.createElement("div");
+
+                textElement.contentEditable = "true";
+                textElement.innerText = element.text;
+
+                textElement.dataset.pageNumber = page.pageNumber;
+                textElement.dataset.textIndex = index;
+
+                textElement.style.position = "absolute";
+
+                textElement.style.left = `${element.x * scale}px`;
+
+                textElement.style.top = `${(element.y - element.height) * scale}px`;
+
+                textElement.style.width = `${element.width * scale}px`;
+
+                textElement.style.height = `${element.height * scale}px`;
+
+                textElement.style.fontSize = `${element.height * scale * 1.25}px`;
+
+                textElement.style.lineHeight = "1";
+
+                textElement.style.whiteSpace = "nowrap";
+
+                textElement.style.pointerEvents = "auto";
+
+                textElement.style.background = "transparent";
+
+                textElement.style.border = "none";
+
+                textElement.style.outline = "none";
+
+                textLayer.appendChild(textElement);
+              });
             }
-        };
+          }
+        }
+      } catch (error) {
+        console.error("Error rendering PDF:", error);
+      }
+    };
 
-        renderPdf();
+    renderPdf();
+  }, [fileUrl, documentData]);
 
-    }, [fileUrl]);
+  return (
+    <div>
+      <button onClick={handleSave}>Save PDF</button>
 
-    return (
-        <div
-            ref={containerRef}
-            style={{
-                width: "100%",
-                padding: "20px"
-            }}
-        />
-    );
+      <div ref={containerRef} />
+    </div>
+  );
 }
 
 export default PdfViewer;
