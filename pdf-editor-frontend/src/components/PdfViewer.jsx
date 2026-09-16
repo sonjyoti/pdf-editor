@@ -13,18 +13,75 @@ function PdfViewer({ fileUrl, fileId }) {
 
   const scale = 1.5;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const editedElements = document.querySelectorAll(
       "[contenteditable='true']",
     );
 
+    const changes = [];
+
     editedElements.forEach((element) => {
-      console.log({
-        pageNumber: element.dataset.pageNumber,
-        textIndex: element.dataset.textIndex,
-        newText: element.innerText,
-      });
+      const originalText = element.dataset.originalText;
+
+      const newText = element.innerText;
+
+      if (newText !== originalText) {
+        changes.push({
+          pageNumber: Number(element.dataset.pageNumber),
+
+          textIndex: Number(element.dataset.textIndex),
+
+          newText: newText,
+        });
+      }
     });
+
+    console.log("Changed elements:", changes);
+
+    if (changes.length === 0) {
+      console.log("No changes to save.");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/pdf/${fileId}/edit`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            changes: changes,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to edit PDF");
+      }
+
+      const blob = await response.blob();
+
+      const downloadUrl = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+
+      link.href = downloadUrl;
+      link.download = "edited.pdf";
+
+      document.body.appendChild(link);
+
+      link.click();
+
+      link.remove();
+
+      URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error("Error saving PDF:", error);
+    }
   };
 
   /*
@@ -151,6 +208,7 @@ function PdfViewer({ fileUrl, fileId }) {
 
                 textElement.dataset.pageNumber = page.pageNumber;
                 textElement.dataset.textIndex = index;
+                textElement.dataset.originalText = element.text;
 
                 textElement.style.position = "absolute";
 

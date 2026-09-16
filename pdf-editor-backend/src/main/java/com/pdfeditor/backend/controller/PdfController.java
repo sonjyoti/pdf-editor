@@ -1,7 +1,9 @@
 package com.pdfeditor.backend.controller;
 
 import com.pdfeditor.backend.dto.PdfDocument;
+import com.pdfeditor.backend.dto.PdfEditRequest;
 import com.pdfeditor.backend.service.PdfService;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -54,5 +56,24 @@ public class PdfController {
                 pdfService.extractText(fileId);
 
         return ResponseEntity.ok(document);
+    }
+
+    @PostMapping("/{fileId}/edit")
+    public ResponseEntity<byte[]> editPdf(
+            @PathVariable String fileId,
+            @RequestBody PdfEditRequest request
+    ) throws IOException {
+
+        byte[] editedPdf =
+                pdfService.editPdf(fileId, request);
+
+        return ResponseEntity
+                .ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"edited.pdf\""
+                )
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(editedPdf);
     }
 }
